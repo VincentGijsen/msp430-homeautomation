@@ -21,15 +21,20 @@
 Enrf24 radio(CMD, CSN, IRQ);
 const uint8_t rxaddr[] = SERVER_ADDRESS;
 const uint8_t txaddr[] = SERVER_ADDRESS;
- char aColour[3] = {0x00,0xFF,0xFF} ;
+char aColour[3] = {0x00,0xFF,0xFF} ;
 
 void dump_radio_status_to_serialport(uint8_t);
+
+
+String inputString = "";         // a string to hold incoming data
+boolean stringComplete = false;  // whether the string is complete
 
 #define VERBOSE 0
 
 void setup() {
   //SERIAL SETTINGS
   Serial.begin(9600);
+  inputString.reserve(8);
 
   //SPI SETTINGS
   SPI.begin();
@@ -65,18 +70,20 @@ void blinkRed()
   digitalWrite(LED_RED, HIGH);
   delay(10);
   digitalWrite(LED_RED, LOW);
-  delay(100);
+  delay(10);
 }
 
 void loop() {
+  //read serial port:
+ ProcessSerial();
+  
    char inbuf[32];
     #if VERBOSE > 0
     dump_radio_status_to_serialport(radio.radioState());  // Should show Receive Mode
     Serial.print("Wainting for messages");
     #endif
-    while (!radio.available(true))
-      ;
-    if (radio.read(inbuf)) {
+    if (radio.available(true))
+     if (radio.read(inbuf)) {
         #if VERBOSE > 0
         Serial.println("Received packet: ");
         Serial.print("byte 1: ");
@@ -86,13 +93,63 @@ void loop() {
         #endif
       descisionMaker(inbuf);
     }
+    
+    if (stringComplete) {
+      blinkRed();
+      blinkRed();
+      char address[5];
+      char payload[4];
+      //format: [address][action][value(s)];
+      //format: [SERVA][0x01][value]
+      address[0]=inputString[1];
+      address[1]=inputString[2];
+      address[2]=inputString[3];
+      address[3]=inputString[4];
+      address[4]=inputString[5];
+      
+      //set type of package
+      payload[0]=inputString[6];
+     
+      switch(inputString[6])
+      {
+         case PACKET_BRIGHTNESS:
+           payload[1] = inputString[7];
+           break;
+         
+         case PACKET_SWITCH:
+           payload[1] = inputString[7];
+           break;
+           
+         case PACKET_RGB:
+           payload[1] = inputString[7];
+           payload[2] = inputString[8];
+           payload[3] = inputString[9];
+           break;
+         
+          default:
+            Serial.print("Unknown type of package: ");
+            Serial.print(inputString[6], HEX);
+            break;
+      }
+       Serial.println("send command onAir;");
+      //set package away
+      sendRF(address, payload);
+     
+      inputString = "";
+      stringComplete = false;
+    }
 }
 
- 
 
+/**
+* This is excuted to decide how to convert the package to be pc-readable;
+* payload-layout [0-4 address of the sending node][type ofpackage byte][payload]
+*/
 void descisionMaker(char *packet)
 {
+  blinkRed();
   char fromAddress[5];
+   char c[1];
   #if VERBOSE > 0
     Serial.print("package type: ");
     Serial.print(packet[5],HEX);
@@ -108,7 +165,6 @@ void descisionMaker(char *packet)
   //the 5th byte contains type of package
   switch (packet[5]) {
    case PACKET_TEMP:
-      blinkRed();
       uint16_t temperature;
       temperature = packet[6] | (uint16_t)packet[7] << 8;
       
@@ -120,14 +176,11 @@ void descisionMaker(char *packet)
       printDec(temperature);
        
        #endif
-       printData(fromAddress, "temp", temperature);
+       printToPcTemp(fromAddress, "t", temperature);
      
       break;
    
    case PACKET_BATT:
-      blinkRed();
-      blinkRed();
-    
       uint32_t voltage;
     //  voltage = (packet[1] <<  24) | (packet[2] << 16) | (packet[3] << 8) | packet[4];
       #if VERBOSE > 0
@@ -137,15 +190,30 @@ void descisionMaker(char *packet)
       break;
    
    case PACKET_MYADDR:
-      blinkRed();
-      blinkRed();
-      blinkRed();
-      blinkRed();
-      printData(fromAddress, "Ping", 'p');
-
-      SendColour(fromAddress, aColour);
+      printPing(fromAddress);
       break;
   
+  case PACKET_BRIGHTNESS:
+     
+      c[0] = packet[6];
+      printToPcNums(fromAddress, "b", c, 1);
+      break;
+      
+      case PACKET_RGB:
+      char brightness[3];
+      brightness[0] = packet[6];
+      brightness[1] = packet[7];
+      brightness[2] = packet[8];
+      printToPcNums(fromAddress, "b", brightness, 3);
+      break;
+ 
+  case PACKET_SWITCH:
+      c[0] = packet[6];
+      printToPcNums(fromAddress, "s", c, 1);
+      break;
+ 
+    
+      
   default:
     //do nothing
     break;  
@@ -153,25 +221,61 @@ void descisionMaker(char *packet)
    
 }
 
-void SendColour(char *address, char *colors){
+void sendRF(char *address, char *data){
     radio.setTXaddress(address);
-    radio.print(colors);
+    radio.print(data);
     radio.flush();
 }
 
-void printData(char * address, char * type, uint16_t value){
+void _printAddress(char *address){
     int x;  
     Serial.print("[");
     for (x=0;x<5;x++){
       Serial.print(address[x]);
     }
-    Serial.print( "]-");
+    Serial.print( "]");
+}
+
+void printToPcTemp(char * address, char * type, uint16_t value){
+    _printAddress(address);
     Serial.print(type);
     Serial.print("=");
     Serial.print(value/10, DEC);
     Serial.print(".");
     Serial.print(value%10, DEC);
     Serial.print(";");
+}
+
+void printPing(char * address){
+  _printAddress(address);
+  Serial.print("p;");
+}
+
+
+void printToPcNums(char * address, char * type, char *vals, int length){
+    int x;
+    _printAddress(address);
+    Serial.print(type);
+    Serial.print("=");
+    for (x=0;x<length;x++){
+      Serial.print(vals[x], DEC);
+    }
+    Serial.print(";");
+}
+
+
+void ProcessSerial() {
+  if (Serial.available() > 0) {
+    // get the new byte:
+    char inChar = (char)Serial.read(); 
+    // add it to the inputString:
+    inputString += inChar;
+    // if the incoming character is a newline, set a flag
+    // so the main loop can do something about it:
+    if (inChar == '\n') {
+      stringComplete = true;
+    } 
+  }
 }
 
 

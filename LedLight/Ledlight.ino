@@ -17,31 +17,40 @@
 #define CSN P2_1
 #define IRQ P2_2
 
-#define LED_RED P1_0
-#define LED_CLK P2_3
-#define LED_YELLOW P2_3
-#define BLINK_DELAY 5
-#define POWERNAP 5000
 
-const unsigned char initColor[3] = {0xFE, 0x00, 0x00};
+#define SIMPLETYPE true
+//Note, pin 1_0 and 2_3 cannot be used for pwm
+#define LED_DRIVER P2_4
+#define BLINK_DELAY 5
+#define POWERNAP 10
+#define TOPCOUNTER 500
 
 //ENABLE SERIAL AND PRINT DEBUGGIN
-#define VERBOSE 1
+#define VERBOSE 0
 
 Enrf24 radio(CMD, CSN, IRQ);
-WS2811Driver ledStrip;
 
 const uint8_t rxaddr[] = LED_CONTROLLER1;
 const uint8_t txaddr[] = SERVER_ADDRESS;
 
-void dump_radio_status_to_serialport(uint8_t);
 
 uint8_t i = 0;
 uint32_t average = 0;
 uint32_t values[SAMPLES];
 
-uint8_t moduloCnt=0;
+uint16_t loopCounter=0;
 
+/*
+ *  Prototypes
+ */
+ 
+void dump_radio_status_to_serialport(uint8_t);
+
+/*
+ *   Mandatory logic
+ */
+ 
+ 
 void setup() {
 #if VERBOSE > 0
   //SERIAL SETTINGS
@@ -67,85 +76,87 @@ void setup() {
   radio.deepsleep();
   
   //LEDS Settings 
-  pinMode(LED_RED, OUTPUT);
-  pinMode(LED_YELLOW, OUTPUT);
-  digitalWrite(LED_RED, LOW);
-  digitalWrite(LED_YELLOW,LOW);
-  
-  //DIGITAL LED(S) Settings
-  pinMode(LED_CLK, OUTPUT);
-  ledStrip.begin();
-  ledStrip.setPinMask(LED_CLK);
-  ledStrip.setLEDCount(1);
-  ledStrip.write(initColor, 3);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(LED_DRIVER, OUTPUT);
+  analogWrite(LED_DRIVER, 50);
+
+  #ifdef RGBTYPE  
+      //DIGITAL LED(S) Settings
+      pinMode(P2_3, OUTPUT);
+      ledStrip.begin();
+      ledStrip.setPinMask(P2_3);
+      ledStrip.setLEDCount(1);
+      ledStrip.write(initColor, 3);
+  #endif
+  delay(1000);
   
   //Blink redled to indicate 
   blinkRed();
-#if VERBOSE > 0
-  Serial.println("done Setup");
-#endif
-
-  
+  pingServer();
 }
 
 void blinkRed()
 {
-  digitalWrite(LED_RED, HIGH);
+  digitalWrite(RED_LED, HIGH);
   delay(BLINK_DELAY);
-  digitalWrite(LED_RED, LOW);
+  digitalWrite(RED_LED, LOW);
   delay(BLINK_DELAY);
 }
 
-void pingServer(){
-   //send a package with Temperature
-  char packetBuffer[8];
-  packetBuffer[0] = rxaddr[0];
-  packetBuffer[1] = rxaddr[1];
-  packetBuffer[2] = rxaddr[2];
-  packetBuffer[3] = rxaddr[3];
-  packetBuffer[4] = rxaddr[4];
-  packetBuffer[5] = PACKET_MYADDR;
-  radio.print(packetBuffer);
-  radio.flush();
-}
 
 void loop() {
-  uint16_t cnt=0;
-  char inbuf[32];
-  blinkRed();
-  pingServer();
+   char inbuf[32];
   //Go listen
   radio.enableRX();  // Start listening
   
-  //wait forever ;
-   while (!radio.available(true))
-   {
-     cnt++;
-     if (cnt == 0xFFFF)
-       break;
-   }
-         
+  if(radio.available(true))
+   {      
    if (radio.read(inbuf)) {
-     
-       // 3 bytes, they represent R,G,B
-       //controllers take led as rbg :S
-     unsigned char r,g,b,led[3];
-     r=inbuf[0];
-     g=inbuf[1];
-     b=inbuf[2];
-     led[0]=r;
-     led[1]=b;
-     led[2]=g;
-     ledStrip.write(led, 3);
+    #ifdef SIMPLETYPE
+         //valid type of package
+         if (inbuf[0] == PACKET_BRIGHTNESS){
+           analogWrite(LED_DRIVER, inbuf[1]);
+           blinkRed();
+         }
+    #endif 
+    
+     #ifdef RGBTYPE
+         // 3 bytes, they represent R,G,B
+         //controllers take led as rbg :S
+         unsigned char r,g,b,led[3];
+         r=inbuf[0];
+         g=inbuf[1];
+         b=inbuf[2];
+         led[0]=r;
+         led[1]=b;
+         led[2]=g;
+         ledStrip.write(led, 3);
+     #endif
     }
+   }
+  /**
+  *
+  * Blink periodically and ping server
+  *
+  */
   
+  loopCounter++;
   
-   #if VERBOSE > 0
-    dump_radio_status_to_serialport(radio.radioState());  // Should show Receive Mode
-    Serial.print("waiting for POWERNAP seconds");
-   #endif
+  if(loopCounter == TOPCOUNTER){
+    //reset counter
+    loopCounter = 0;
+    blinkRed();
+    blinkRed();
+    blinkRed();
+    blinkRed();
    
-  delay(POWERNAP);
+   //send 'keep-alive' 
+     pingServer();
+ 
+  }
+  
+  
+  delay(POWERNAP);  
 }
 
 void printPackage(char p[], int length){
@@ -171,12 +182,13 @@ uint32_t readTemperature(){
 }
 
 uint16_t readBattery(){
- uint16_t adc = analogRead(A0); 
+ uint16_t adc = analogRead(A1); 
  uint32_t volt = (adc >> 10) * 1500;
  return volt; 
 }
 
 #if VERBOSE > 0
+
 void printDec(uint32_t ui) {
   Serial.print(ui/10, DEC);
   Serial.print(".");
@@ -214,3 +226,17 @@ void dump_radio_status_to_serialport(uint8_t status)
 }
 
 #endif
+
+
+void pingServer(){
+   //send a package with Temperature
+  char packetBuffer[8];
+  packetBuffer[0] = rxaddr[0];
+  packetBuffer[1] = rxaddr[1];
+  packetBuffer[2] = rxaddr[2];
+  packetBuffer[3] = rxaddr[3];
+  packetBuffer[4] = rxaddr[4];
+  packetBuffer[5] = PACKET_MYADDR;
+  radio.print(packetBuffer);
+  radio.flush();
+}

@@ -1,8 +1,5 @@
-
-
 //Overall settings
-
-///NOTE SYMLINKED!
+// Author: Vincent Gijsen
 
 #ifndef GLOBAL_SETTINGS_H_
 #define GLOBAL_SETTINGS_H_
@@ -19,18 +16,11 @@
 #define PACKET_TEMP 0x01
 #define PACKET_BATT 0x02
 #define PACKET_MYADDR 0x03
+#define PACKET_BRIGHTNESS 0x04
+#define PACKET_RGB 0x05
+#define PACKET_SWITCH 0x06
 
 #define SAMPLES 4
 
 
 #endif /* SETTINGS */
-
-#ifndef WS2811_H_
-#define WS2811_H_
-
-#define WS2811_BITMASK BIT7
-#define WS2811_PORTDIR P2DIR
-#define WS2811_PORTOUT P2OUT
-
-#endif /* WS2811_H_ */
-
