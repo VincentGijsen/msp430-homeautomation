@@ -20,7 +20,7 @@
 
 #define SIMPLETYPE true
 //Note, pin 1_0 and 2_3 cannot be used for pwm
-#define LED_DRIVER P2_4
+#define LED_DRIVER P1_2
 #define BLINK_DELAY 5
 #define POWERNAP 10
 #define TOPCOUNTER 500
@@ -78,7 +78,7 @@ void setup() {
   //LEDS Settings 
   pinMode(RED_LED, OUTPUT);
   pinMode(LED_DRIVER, OUTPUT);
-  analogWrite(LED_DRIVER, 50);
+  analogWrite(LED_DRIVER, 15);
 
   #ifdef RGBTYPE  
       //DIGITAL LED(S) Settings
@@ -152,6 +152,7 @@ void loop() {
    
    //send 'keep-alive' 
      pingServer();
+     
  
   }
   
