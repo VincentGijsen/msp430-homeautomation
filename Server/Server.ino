@@ -101,29 +101,29 @@ void loop() {
       char payload[4];
       //format: [address][action][value(s)];
       //format: [SERVA][0x01][value]
-      address[0]=inputString[1];
-      address[1]=inputString[2];
-      address[2]=inputString[3];
-      address[3]=inputString[4];
-      address[4]=inputString[5];
+      address[0]=inputString[0];
+      address[1]=inputString[1];
+      address[2]=inputString[2];
+      address[3]=inputString[3];
+      address[4]=inputString[4];
       
       //set type of package
-      payload[0]=inputString[6];
+      payload[0]=inputString[5];
      
-      switch(inputString[6])
+      switch(inputString[5])
       {
          case PACKET_BRIGHTNESS:
-           payload[1] = inputString[7];
+           payload[1] = inputString[6];
            break;
          
          case PACKET_SWITCH:
-           payload[1] = inputString[7];
+           payload[1] = inputString[6];
            break;
            
          case PACKET_RGB:
-           payload[1] = inputString[7];
-           payload[2] = inputString[8];
-           payload[3] = inputString[9];
+           payload[1] = inputString[6];
+           payload[2] = inputString[7];
+           payload[3] = inputString[8];
            break;
          
           default:
@@ -131,10 +131,11 @@ void loop() {
             Serial.print(inputString[6], HEX);
             break;
       }
-       Serial.println("send command onAir;");
+      Serial.println("send command onAir;");
+      
+      
       //set package away
       sendRF(address, payload);
-     
       inputString = "";
       stringComplete = false;
     }

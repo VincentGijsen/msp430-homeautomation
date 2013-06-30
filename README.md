@@ -20,4 +20,7 @@ Yes, probably far form efficient code, but quick development in return :)
 
 enyoy
 
+# NOTEs
+
+the hardware schema will most like not be up to date, as my current developents focus on software and prototype boards
 
