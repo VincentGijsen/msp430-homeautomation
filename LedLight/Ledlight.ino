@@ -1,3 +1,6 @@
+//Define if simple Dimmer, else RGB
+#define SIMPLETYPE true
+
 #include "global_settings.h"
 
 #include <Enrf24.h>
@@ -6,58 +9,23 @@
 #include <SPI.h>
 
 
-
-
-#if defined(__MSP430G2452__) || defined(__MSP430G2553__) || defined(__MSP430G2231__) 
-#pragma message  ("Board supported, CPU")
-#else
-#error Board not supported
-#endif
-
-#define CMD P2_0
-#define CSN P2_1
-#define IRQ P2_2
-
-
-//#define SIMPLETYPE true
-//Note, pin 1_0 and 2_3 cannot be used for pwm
-#define LED_DRIVER P1_2
-
-#define LED_DRIVER_R P2_3
-#define LED_DRIVER_G P2_4
-#define LED_DRIVER_B P2_5
-
-
-#define BLINK_DELAY 5
-#define POWERNAP 10
-#define TOPCOUNTER 500
-#define FADEUPDATE 10
-
 //ENABLE SERIAL AND PRINT DEBUGGIN
 #define VERBOSE 0
 
 Enrf24 radio(CMD, CSN, IRQ);
+const uint8_t addr[] = LISTEN_ADDRESS;
+const uint8_t myAddress[2] = C1;
 
-const uint8_t rxaddr[] = LED_CONTROLLER1;
-const uint8_t txaddr[] = SERVER_ADDRESS;
-
-
-uint8_t i = 0;
+int8_t i = 0;
 uint32_t average = 0;
 uint32_t values[SAMPLES];
 
 uint16_t loopCounter=0;
 
-#if SIMPLETYPE
-  #define LEDLENGTH 1
-  #pragma message  ("Compiling for board: SIMPLE")
-#else
-  #define LEDLENGTH 3
-  #pragma message  ("Compiling for board: RGB")
-#endif
-
 char setPoint[LEDLENGTH];
 char current[LEDLENGTH];
+
+
 
 /*
 *  Prototypes
@@ -71,55 +39,60 @@ void dump_radio_status_to_serialport(uint8_t);
 
 
 void setup() {
-#if VERBOSE > 0
-//SERIAL SETTINGS
-    Serial.begin(9600);
-    Serial.println("Beginning setup");
-#endif
-//ANALOG SETTINGS
-    analogReference(INTERNAL1V5);
-analogRead(TEMPSENSOR); // first reading usually wrong
-
-//SPI SETTINGS
-SPI.begin();
-SPI.setDataMode(SPI_MODE0);
-SPI.setBitOrder(1); // MSB-first
-
-//RADIO SETTINGS
-radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
-radio.setRXaddress((void*)rxaddr);
-radio.setTXaddress((void*)txaddr);  
-
-#if VERBOSE > 0
-  dump_radio_status_to_serialport(radio.radioState());
-#endif
-radio.deepsleep();
-
-//LEDS Settings 
-pinMode(RED_LED, OUTPUT);
-#ifdef SIMPLETYPE
-  pinMode(LED_DRIVER, OUTPUT);
-  analogWrite(LED_DRIVER, 15);
-#else
-  pinMode(LED_DRIVER_R, OUTPUT);
-  pinMode(LED_DRIVER_G, OUTPUT);
-  pinMode(LED_DRIVER_B, OUTPUT);
+  #if VERBOSE > 0
+  //SERIAL SETTINGS
+      Serial.begin(9600);
+      Serial.println("Beginning setup");
+  #endif
+  //ANALOG SETTINGS
+  analogReference(INTERNAL1V5);
+  analogRead(TEMPSENSOR); // first reading usually wrong
+  randomSeed(analogRead(3));
+  //SPI SETTINGS
+  SPI.begin();
+  SPI.setDataMode(SPI_MODE0);
+  SPI.setBitOrder(1); // MSB-first
   
-  analogWrite(LED_DRIVER_R, 5);
-  analogWrite(LED_DRIVER_G, 5);
-  analogWrite(LED_DRIVER_B, 5);
-#endif
-delay(1000);
-
-//Blink redled to indicate 
-blinkRed();
-pingServer();
-
-int x=0;
-for (x=0; x< LEDLENGTH; x++){
-    setPoint[x] = 0;
-    current[x] = 0;
-}
+  //RADIO SETTINGS
+  radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
+  radio.setRXaddress((void*)addr);
+  radio.setTXaddress((void*)addr);  
+  radio.autoAck(false);
+  
+  #if VERBOSE > 0
+    dump_radio_status_to_serialport(radio.radioState());
+  #endif
+  radio.deepsleep();
+  
+  //LEDS Settings 
+  pinMode(RED_LED, OUTPUT);
+  #ifdef SIMPLETYPE
+    pinMode(LED_DRIVER, OUTPUT);
+    analogWrite(LED_DRIVER, 0);
+  #else
+    pinMode(LED_DRIVER_R, OUTPUT);
+    pinMode(LED_DRIVER_G, OUTPUT);
+    pinMode(LED_DRIVER_B, OUTPUT);
+    
+    analogWrite(LED_DRIVER_R, 5);
+    analogWrite(LED_DRIVER_G, 5);
+    analogWrite(LED_DRIVER_B, 5);
+  #endif
+  delay(1000);
+  
+  //Set current hight so we dim the light at boot
+   current[0] = 30;
+   current[1] = 30;
+   current[2] = 30;
+  
+  //Blink redled to indicate 
+  blinkRed();
+  pingServer();
+  
+  int x=0;
+  for (x=0; x< LEDLENGTH; x++){
+      setPoint[x] = 0;
+  }
 }
 
 void blinkRed()
@@ -127,68 +100,55 @@ void blinkRed()
     digitalWrite(RED_LED, HIGH);
     delay(BLINK_DELAY);
     digitalWrite(RED_LED, LOW);
-    delay(BLINK_DELAY);
 }
 
+uint8_t packetCounter = random(0xFE);
 
 void loop() {
     uint8_t x;
-    char inbuf[32];
-//Go listen
-radio.enableRX();  // Start listening
-
-if(radio.available(true))
-{      
-   if (radio.read(inbuf)) {
-    #ifdef SIMPLETYPE
-     //valid type of package
-     if (inbuf[0] == PACKET_BRIGHTNESS){
-       setPoint[0] = inbuf[1];
-       blinkRed();
-   }
-   #else
-     if(inbuf[0] == PACKET_RGB){
-       // 3 bytes, they represent R,G,B
-       setPoint[0] = inbuf[1];
-       setPoint[1] = inbuf[2];
-       setPoint[2] = inbuf[3];
-   }
- #endif
-}
-}
-
-
-/**
-*
-* Blink periodically and ping server
-*
-*/
-loopCounter++;
-if(loopCounter == TOPCOUNTER){
-//reset counter
-    loopCounter = 0;
-    blinkRed();
-    pingServer();
-}
-
-if((loopCounter % FADEUPDATE) == 0)
-{
-    for(x=0;x<LEDLENGTH;x++){
-      if (current[x] < setPoint[x])
-        current[x]++;
-    else if (current[x] > setPoint[x])
-        current[x]--;
-
-    //update the current value towards setpoint
-    #ifdef SIMPLETYPE
-    analogWrite(LED_DRIVER, current[x]);
-    #else
-    analogWrite(LED_DRIVER_R, current[0]);
-    analogWrite(LED_DRIVER_G, current[1]);
-    analogWrite(LED_DRIVER_B, current[2]);
-    #endif
-}
-}
+    char payLoad[32];
+    //Go listen
+    radio.enableRX();  // Start listening
+    
+    if(radio.available(true))
+    {      
+     if (radio.read(payLoad)) {
+       handelPackage(payLoad);
+     }
+    }
+  
+  
+     /**
+    *
+    * Blink periodically and ping server
+    *
+    */
+    loopCounter++;
+    if(loopCounter == TOPCOUNTER){
+    //reset counter
+        loopCounter = 0;
+        blinkRed();
+        pingServer();
+    }
+    
+    if((loopCounter % FADEUPDATE) == 0)
+    {
+        for(x=0;x<LEDLENGTH;x++){
+          if (current[x] < setPoint[x])
+            current[x]++;
+        else if (current[x] > setPoint[x])
+            current[x]--;
+    
+        //update the current value towards setpoint
+        #ifdef SIMPLETYPE
+        analogWrite(LED_DRIVER, current[x]);
+        #else
+        analogWrite(LED_DRIVER_R, current[0]);
+        analogWrite(LED_DRIVER_G, current[1]);
+        analogWrite(LED_DRIVER_B, current[2]);
+        #endif
+    }
+  }
 
 delay(POWERNAP);  
 }
@@ -259,16 +219,79 @@ void dump_radio_status_to_serialport(uint8_t status)
 }
 #endif
 
+/**
+  * Handels (re)transmision of the package to other nodes (if new)
+  */ 
+void  handelPackage(char *inbuff){
+  //Resent packet 
+  if(inbuff[REG_PACK_COUNTER] != packetCounter){
+    //set packageCounter to new counter
+    packetCounter = inbuff[REG_PACK_COUNTER];
+    
+    if(inbuff[REG_PACK_ADDRMSB] == myAddress[0] && inbuff[REG_PACK_ADDRLSB] == myAddress[1])
+    {
+     //We received a package for ourselves :)
+     processPackage(inbuff);
+    }
+    else
+    { 
+          //This packet is not for us, but new, retransmit   
+          //add some 'pseudo random sleep'
+          delay(myAddress[0] + myAddress[1]);
+          blinkRed();
+          //broadcast old package with OLD counter!
+          radio.print(inbuff);
+          radio.flush();
+          
+    }          
+    
+   } 
+}
+
+/**
+  *  Process the package as it is ours
+  */
+void processPackage(char *package){
+#ifdef SIMPLETYPE
+     //valid type of package
+     if (package[REG_PACK_TYPESET] == PACKET_BRIGHTNESS){
+       setPoint[0] = package[REG_PACK_VAL0];
+       blinkRed();
+     }
+#else
+     if(package[REG_PACK_TYPESET] == PACKET_RGB){
+       // 3 bytes, they represent R,G,B
+       setPoint[0] = package[REG_PACK_VAL0];
+       setPoint[1] = package[REG_PACK_VAL1];
+       setPoint[2] = package[REG_PACK_VAL2];
+   }
+#endif  
+}
+
+/**
+  * Calcs new packetId 
+  */
+char calcPacketIdent(){
+  if(packetCounter != 0xFF)
+  {
+    packetCounter++;
+  }
+  else
+    packetCounter = 1;
+    
+  return packetCounter;
+}
 
 void pingServer(){
 //send a package with Temperature
-    char packetBuffer[8];
-    packetBuffer[0] = rxaddr[0];
-    packetBuffer[1] = rxaddr[1];
-    packetBuffer[2] = rxaddr[2];
-    packetBuffer[3] = rxaddr[3];
-    packetBuffer[4] = rxaddr[4];
-    packetBuffer[5] = PACKET_MYADDR;
+    char packetBuffer[4];
+    packetBuffer[0] = calcPacketIdent();
+    packetBuffer[1] = myAddress[0];    
+    packetBuffer[2] = myAddress[1];
+    packetBuffer[3] = PACKET_PING;
     radio.print(packetBuffer);
     radio.flush();
 }
+
+
+

@@ -5,31 +5,24 @@
 
 #include "global_settings.h"
 
-#if defined(__MSP430G2452__) || defined(__MSP430G2553__) || defined(__MSP430G2231__) 
-#else
-#error Board not supported
-#endif
 
-#define CMD P2_0
-#define CSN P2_1
-#define IRQ P2_2
-
-#define LED_RED RED_LED
-#define LED_YELLOW P2_3
+#define VERBOSE 0
 
 
 Enrf24 radio(CMD, CSN, IRQ);
-const uint8_t rxaddr[] = SERVER_ADDRESS;
-const uint8_t txaddr[] = SERVER_ADDRESS;
+const uint8_t address[] = LISTEN_ADDRESS;
+
+
 char aColour[3] = {0x00,0xFF,0xFF} ;
-
-void dump_radio_status_to_serialport(uint8_t);
-
 
 String inputString = "";         // a string to hold incoming data
 boolean stringComplete = false;  // whether the string is complete
 
-#define VERBOSE 0
+char packetCounter = 5;
+
+//Prototype
+void dump_radio_status_to_serialport(uint8_t);
+
 
 void setup() {
   //SERIAL SETTINGS
@@ -43,7 +36,10 @@ void setup() {
   
   //RADIO SETTINGS
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
-  radio.setRXaddress((void*)rxaddr);
+  radio.setRXaddress((void*)address);
+  radio.setTXaddress((void*)address);
+  radio.autoAck(false);
+  
  // radio.setTXaddress((void*)txaddr);  
   #if VERBOSE > 0
   dump_radio_status_to_serialport(radio.radioState());
@@ -52,10 +48,10 @@ void setup() {
   radio.deepsleep();
   
   //LEDS Settings 
-  pinMode(LED_RED, OUTPUT);
-  pinMode(LED_YELLOW, OUTPUT);
-  digitalWrite(LED_RED, LOW);
-  digitalWrite(LED_YELLOW,LOW);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(GREEN_LED,LOW);
   
   //Blink redled to indicate 
   blinkRed();
@@ -67,77 +63,85 @@ void setup() {
 
 void blinkRed()
 {
-  digitalWrite(LED_RED, HIGH);
-  delay(10);
-  digitalWrite(LED_RED, LOW);
-  delay(10);
+  digitalWrite(RED_LED, HIGH);
+  delay(5);
+  digitalWrite(RED_LED, LOW);
 }
 
 void loop() {
   //read serial port:
- ProcessSerial();
+   ProcessSerial();
   
    char inbuf[32];
     #if VERBOSE > 0
-    dump_radio_status_to_serialport(radio.radioState());  // Should show Receive Mode
-    Serial.print("Wainting for messages");
+    //dump_radio_status_to_serialport(radio.radioState());  // Should show Receive Mode
+    //Serial.print("Wainting for messages");
     #endif
     if (radio.available(true))
      if (radio.read(inbuf)) {
         #if VERBOSE > 0
         Serial.println("Received packet: ");
-        Serial.print("byte 1: ");
-       // printPackage(inbuf,8);
-        
+        Serial.print("counter: ");
+        Serial.println(inbuf[0], DEC);
+        Serial.println(inbuf);
         
         #endif
-      descisionMaker(inbuf);
+      if(inbuf[0] != packetCounter){
+        #if VERBOSE > 0
+         Serial.println("new package :)");
+         #endif
+         //Handel this NEW package
+        packetCounter = inbuf[REG_PACK_COUNTER];
+        descisionMaker(inbuf);
+      }
+      else
+      {
+        #if VERBOSE > 0
+        Serial.println("Old package :(");
+        //Old package
+        #endif
+      }
     }
     
     if (stringComplete) {
       blinkRed();
-      blinkRed();
-      char address[5];
-      char payload[4];
-      //format: [address][action][value(s)];
-      //format: [SERVA][0x01][value]
-      address[0]=inputString[0];
-      address[1]=inputString[1];
-      address[2]=inputString[2];
-      address[3]=inputString[3];
-      address[4]=inputString[4];
-      
+      char newPayload[6];
+      newPayload[REG_PACK_COUNTER]=calcPacketIdent();
+      newPayload[REG_PACK_ADDRMSB]=inputString[0];
+      newPayload[REG_PACK_ADDRLSB]=inputString[1];
       //set type of package
-      payload[0]=inputString[5];
+      newPayload[REG_PACK_TYPESET]=inputString[2];
      
-      switch(inputString[5])
+      switch(newPayload[REG_PACK_TYPESET])
       {
          case PACKET_BRIGHTNESS:
-           payload[1] = inputString[6];
+           newPayload[REG_PACK_VAL0] = inputString[3];
            break;
          
          case PACKET_SWITCH:
-           payload[1] = inputString[6];
+           newPayload[REG_PACK_VAL0] = inputString[3];
            break;
            
          case PACKET_RGB:
-           payload[1] = inputString[6];
-           payload[2] = inputString[7];
-           payload[3] = inputString[8];
+           newPayload[REG_PACK_VAL0] = inputString[3];
+           newPayload[REG_PACK_VAL1] = inputString[4];
+           newPayload[REG_PACK_VAL2] = inputString[5];
            break;
          
           default:
             Serial.print("Unknown type of package: ");
-            Serial.print(inputString[6], HEX);
+            Serial.print(newPayload[REG_PACK_TYPESET], HEX);
             break;
       }
       Serial.println("send command onAir;");
       
       
       //set package away
-      sendRF(address, payload);
+      radio.print(newPayload);
+      radio.flush();
       inputString = "";
       stringComplete = false;
+      radio.enableRX();
     }
 }
 
@@ -148,36 +152,28 @@ void loop() {
 */
 void descisionMaker(char *packet)
 {
+  char c[1];
   blinkRed();
-  char fromAddress[5];
-   char c[1];
   #if VERBOSE > 0
     Serial.print("package type: ");
-    Serial.print(packet[5],HEX);
-    Serial.println("");
+    Serial.println(packet[REG_PACK_TYPESET],HEX);
   #endif
 
-  fromAddress[0] = packet[0];
-  fromAddress[1] = packet[1];
-  fromAddress[2] = packet[2];
-  fromAddress[3] = packet[3];
-  fromAddress[4] = packet[4];
-  
-  //the 5th byte contains type of package
-  switch (packet[5]) {
+  //the REG_PACK_TYPESET byte contains type of package
+  switch (packet[REG_PACK_TYPESET]) {
    case PACKET_TEMP:
       uint16_t temperature;
-      temperature = packet[6] | (uint16_t)packet[7] << 8;
+      temperature = packet[REG_PACK_VAL0] | (uint16_t)packet[REG_PACK_VAL1] << 8;
       
       #if VERBOSE > 0
        Serial.println("lo/hi bytes: ");
-       Serial.print(packet[6]);
+       Serial.print(packet[REG_PACK_VAL0]);
        Serial.print(" - ");
-       Serial.println(packet[7]);   
+       Serial.println(packet[REG_PACK_VAL1]);   
       printDec(temperature);
        
        #endif
-       printToPcTemp(fromAddress, "t", temperature);
+       printToPcTemp(packet, ((char)REG_PACK_TYPESET), temperature);
      
       break;
    
@@ -190,27 +186,27 @@ void descisionMaker(char *packet)
       #endif
       break;
    
-   case PACKET_MYADDR:
-      printPing(fromAddress);
+   case PACKET_PING:
+      printPing(packet);
       break;
   
   case PACKET_BRIGHTNESS:
      
-      c[0] = packet[6];
-      printToPcNums(fromAddress, "b", c, 1);
+      c[0] = packet[REG_PACK_VAL0];
+      printToPcNums(packet, PACKET_BRIGHTNESS, c, 1);
       break;
       
       case PACKET_RGB:
       char brightness[3];
-      brightness[0] = packet[6];
-      brightness[1] = packet[7];
-      brightness[2] = packet[8];
-      printToPcNums(fromAddress, "b", brightness, 3);
+      brightness[0] = packet[REG_PACK_VAL0];
+      brightness[1] = packet[REG_PACK_VAL1];
+      brightness[2] = packet[REG_PACK_VAL2];
+      printToPcNums(packet, PACKET_RGB, brightness, 3);
       break;
  
   case PACKET_SWITCH:
-      c[0] = packet[6];
-      printToPcNums(fromAddress, "s", c, 1);
+      c[0] = packet[REG_PACK_VAL0];
+      printToPcNums(packet, PACKET_SWITCH, c, 1);
       break;
  
     
@@ -222,22 +218,29 @@ void descisionMaker(char *packet)
    
 }
 
-void sendRF(char *address, char *data){
-    radio.setTXaddress(address);
-    radio.print(data);
-    radio.flush();
+
+/**
+  * Calcs new packetId 
+  */
+char calcPacketIdent(){
+  if(packetCounter< 0xFF)
+  {
+    packetCounter = 1;
+  }
+  else
+    packetCounter++;
+  return packetCounter;
 }
 
+
 void _printAddress(char *address){
-    int x;  
     Serial.print("[");
-    for (x=0;x<5;x++){
-      Serial.print(address[x]);
-    }
+    Serial.print(address[REG_PACK_ADDRMSB]);
+    Serial.print(address[REG_PACK_ADDRLSB]);
     Serial.print( "]");
 }
 
-void printToPcTemp(char * address, char * type, uint16_t value){
+void printToPcTemp(char * address, char type, uint16_t value){
     _printAddress(address);
     Serial.print(type);
     Serial.print("=");
@@ -253,7 +256,7 @@ void printPing(char * address){
 }
 
 
-void printToPcNums(char * address, char * type, char *vals, int length){
+void printToPcNums(char * address, char type, char *vals, int length){
     int x;
     _printAddress(address);
     Serial.print(type);
