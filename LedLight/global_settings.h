@@ -25,6 +25,11 @@
 #define C3 {'L','3'}
 #define C4 {'L','4'}
 
+#define R1 {'R','1'}
+#define R2 {'R','2'}
+#define R3 {'R','3'}
+#define R4 {'R','4'}
+
 
 //Radio Settings
 #define RADIO_SPEED 1000000
@@ -48,9 +53,9 @@
 
 //Note, pin 1_0 and 2_3 cannot be used for pwm
 #define LED_DRIVER P1_2
-#define LED_DRIVER_R P2_3
-#define LED_DRIVER_G P2_4
-#define LED_DRIVER_B P2_5
+#define LED_DRIVER_R P2_6
+#define LED_DRIVER_G P2_5
+#define LED_DRIVER_B P2_4
 
 //Definitions for Sleep and fading times
 #define BLINK_DELAY 5

@@ -1,5 +1,5 @@
 //Define if simple Dimmer, else RGB
-#define SIMPLETYPE true
+//#define SIMPLETYPE true
 
 #include "global_settings.h"
 
@@ -14,7 +14,11 @@
 
 Enrf24 radio(CMD, CSN, IRQ);
 const uint8_t addr[] = LISTEN_ADDRESS;
+#ifdef SIMPLETYPE
 const uint8_t myAddress[2] = C2;
+#else
+const uint8_t myAddress[2] = R1;
+#endif
 
 int8_t i = 0;
 uint32_t average = 0;
@@ -74,17 +78,18 @@ void setup() {
     pinMode(LED_DRIVER_G, OUTPUT);
     pinMode(LED_DRIVER_B, OUTPUT);
     
-    analogWrite(LED_DRIVER_R, 5);
-    analogWrite(LED_DRIVER_G, 5);
-    analogWrite(LED_DRIVER_B, 5);
+    analogWrite(LED_DRIVER_R, 0);
+    analogWrite(LED_DRIVER_G, 0);
+    analogWrite(LED_DRIVER_B, 0);
   #endif
   delay(1000);
   
   //Set current hight so we dim the light at boot
    current[0] = 30;
+   #ifndef SIMPLETYPE
    current[1] = 30;
    current[2] = 30;
-  
+  #endif
   //Blink redled to indicate 
   blinkRed();
   pingServer();
