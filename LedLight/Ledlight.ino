@@ -14,7 +14,7 @@
 
 Enrf24 radio(CMD, CSN, IRQ);
 const uint8_t addr[] = LISTEN_ADDRESS;
-const uint8_t myAddress[2] = C1;
+const uint8_t myAddress[2] = C2;
 
 int8_t i = 0;
 uint32_t average = 0;
