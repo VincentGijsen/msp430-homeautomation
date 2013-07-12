@@ -3,7 +3,7 @@
 #include <string.h>
 #include <SPI.h>
 
-#define RED_LED P1_4
+//#define RED_LED P1_4
 #define YELLOW_LED P2_3
 
 #include "global_settings.h"
@@ -41,7 +41,7 @@ void setup() {
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
   radio.setRXaddress((void*)address);
   radio.setTXaddress((void*)address);
-  radio.autoAck(true);
+  radio.autoAck(false);
   
  // radio.setTXaddress((void*)txaddr);  
   #if VERBOSE > 0
@@ -177,7 +177,7 @@ void loop() {
 * This is excuted to decide how to convert the package to be pc-readable;
 * payload-layout [0-4 address of the sending node][type ofpackage byte][payload]
 */
-void descisionMaker(char *packet)
+void descisionMaker(char packet[])
 {
   char c[1];
   blinkRed();

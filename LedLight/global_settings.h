@@ -54,16 +54,12 @@
 #define SAMPLES 4
 
 
-//Note, pin 1_0 and 2_3 cannot be used for pwm
-#define LED_DRIVER_R P2_6
-#define LED_DRIVER_G P2_5
-#define LED_DRIVER_B P2_4
 
 //Definitions for Sleep and fading times
 #define BLINK_DELAY 10
 #define BLINK_ERROR 1000
 #define POWERNAP 2
-#define TOPCOUNTER 0xFF
+#define TOPCOUNTER 0x000F
 #define FADEUPDATE 10
 
 #ifndef BIGCHIP
@@ -75,7 +71,6 @@
   #define LEDLENGTH 3
   #define LED_DRIVER_R P2_6
 #endif
-
 
 #define LED_DRIVER_G P2_5
 #define LED_DRIVER_B P2_4

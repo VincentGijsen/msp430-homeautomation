@@ -15,16 +15,13 @@
 
 Enrf24 radio(CMD, CSN, IRQ);
 const uint8_t addr[] = LISTEN_ADDRESS;
-#ifdef BIGCHIP
-const uint8_t myAddress[2] = R1;
-#else
-const uint8_t myAddress[2] = C2;
-#endif
+
+const uint8_t myAddress[2] = {'L','A'};
 
 int8_t i = 0;
 
 
-uint8_t loopCounter=0;
+uint16_t loopCounter=0;
 
 char setPoint[3];
 char current[3];
@@ -44,20 +41,17 @@ void setup() {
   analogReference(INTERNAL1V5);
   analogRead(TEMPSENSOR); // first reading usually wrong
   //SPI SETTINGS
-  blinkRed();
-
+  
   SPI.begin();
   SPI.setDataMode(SPI_MODE0);
   SPI.setBitOrder(1); // MSB-first
 
-  blinkRed();
   //RADIO SETTINGS
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
   radio.setRXaddress((void*)addr);
   radio.setTXaddress((void*)addr);  
-  radio.autoAck(true);
-  blinkRed();
-
+  radio.autoAck(false);
+  
   radio.deepsleep();
 
   //LEDS Settings 
@@ -96,16 +90,14 @@ void setup() {
 
 
 uint8_t packetCounter = 0x00;
+uint8_t innerCounter = 0;
 
 void loop() {
-  
+  char payLoad[32];
   radio.enableRX();
-  loopCounter++;  
 
   if(radio.available(true))
   {     
-    unsigned char payLoad[32];
-  
     radio.read(payLoad); 
     meshHandler(payLoad);
   }
@@ -117,11 +109,18 @@ void loop() {
    *
    */
 
+  innerCounter++;
+  if(innerCounter == 0xFF){
+    innerCounter = 0;
+    loopCounter++;
+  }
+  
   if(loopCounter == TOPCOUNTER){
     //reset counter
     loopCounter = 0;
-    // blinkRed();
+    blinkRed();
     pingServer();
+    blinkRed(2);
     //radio.enableRX();  // Start listening
   }
   /*
@@ -166,16 +165,17 @@ void printPackage(char p[], int length){
 /**
  * Handels (re)transmision of the package to other nodes (if new)
  */
-void  meshHandler(unsigned char inbuff[]){
+void  meshHandler(char inbuff[]){
+  int status = 0;
   //Resent packet 
   if(inbuff[REG_PACK_COUNTER] != packetCounter){
     //set packageCounter to new counter
     packetCounter = inbuff[REG_PACK_COUNTER];
-    blinkRed(1);
+    status = 1;
     if((inbuff[REG_PACK_ADDRMSB] == myAddress[0]) && (inbuff[REG_PACK_ADDRLSB] == myAddress[1]))
     {
       //We received a package for ourselves :)
-      blinkRed(4);
+      status=4;
 
      if(inbuff[REG_PACK_TYPESET] == PACKET_RGB){
       // 3 bytes, they represent R,G,B
@@ -188,13 +188,13 @@ void  meshHandler(unsigned char inbuff[]){
       else{
         //invalid packet for us!
         //BLINK LoNG!!!
-        blinkRed(10);
+        status =10;
       }
       
     }
     else
     { //The package is not for us, but we retransmit 1-time
-      blinkRed(2);
+      status = 2;
       //This packet is not for us, but new, retransmit   
       //add some 'pseudo random sleep'
      // delay(myAddress[0] + myAddress[1]);
@@ -202,15 +202,17 @@ void  meshHandler(unsigned char inbuff[]){
       //broadcast old package with OLD counter!
       
       //SET THE LENGH!!! if we walk outof your the memory, we'll crash!
-      radio.write(inbuff,32);
+      radio.write(inbuff);
       radio.flush();
-    }          
+    } 
+    
 
   } 
   else{
     //We've seen this pakge already! 
-    blinkRed(1);
+    status = 1;
   }
+  blinkRed(status);
 
 }
 
@@ -229,13 +231,15 @@ char calcPacketIdent(){
 
 void pingServer(){
   //send a package with Temperature
-  char packetBuffer[4];
-  packetBuffer[0] = calcPacketIdent();
-  packetBuffer[1] = myAddress[0];    
-  packetBuffer[2] = myAddress[1];
-  packetBuffer[3] = PACKET_PING;
- // radio.print(packetBuffer);
- // radio.flush();
+  char d[5];
+  d[0] = calcPacketIdent();
+  d[1] = myAddress[0];
+  d[2] = myAddress[1];
+  d[3] = PACKET_PING;
+  d[4] = '\0';
+  
+  radio.print(d);
+  radio.flush();
  }
 
 
