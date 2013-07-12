@@ -8,6 +8,9 @@
 #ifndef GLOBAL_SETTINGS_H_
 #define GLOBAL_SETTINGS_H_
 
+#if defined(__MSP430G2553__)
+#define BIGCHIP
+#endif
 
 #define REG_PACK_COUNTER 0
 #define REG_PACK_ADDRMSB 1
@@ -52,26 +55,31 @@
 
 
 //Note, pin 1_0 and 2_3 cannot be used for pwm
-#define LED_DRIVER P1_2
 #define LED_DRIVER_R P2_6
 #define LED_DRIVER_G P2_5
 #define LED_DRIVER_B P2_4
 
 //Definitions for Sleep and fading times
-#define BLINK_DELAY 5
+#define BLINK_DELAY 10
+#define BLINK_ERROR 1000
 #define POWERNAP 2
-#define TOPCOUNTER 500
+#define TOPCOUNTER 0xFF
 #define FADEUPDATE 10
 
-
-
-#if SIMPLETYPE
+#ifndef BIGCHIP
+  #pragma message  ("Compiling for SMALLCHIP")
   #define LEDLENGTH 1
-  #pragma message  ("Compiling for board: SIMPLE")
+  #define LED_DRIVER_R P1_2
 #else
+  #pragma message  ("Compiling for BIGCHIP")
   #define LEDLENGTH 3
-  #pragma message  ("Compiling for board: RGB")
+  #define LED_DRIVER_R P2_6
 #endif
+
+
+#define LED_DRIVER_G P2_5
+#define LED_DRIVER_B P2_4
+
 
 #endif /* SETTINGS */
 

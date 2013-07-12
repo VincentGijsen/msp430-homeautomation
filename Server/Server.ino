@@ -3,6 +3,9 @@
 #include <string.h>
 #include <SPI.h>
 
+#define RED_LED P1_4
+#define YELLOW_LED P2_3
+
 #include "global_settings.h"
 
 
@@ -18,7 +21,7 @@ char aColour[3] = {0x00,0xFF,0xFF} ;
 String inputString = "";         // a string to hold incoming data
 boolean stringComplete = false;  // whether the string is complete
 
-char packetCounter = 5;
+unsigned char packetCounter = 5;
 
 //Prototype
 void dump_radio_status_to_serialport(uint8_t);
@@ -38,7 +41,7 @@ void setup() {
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
   radio.setRXaddress((void*)address);
   radio.setTXaddress((void*)address);
-  radio.autoAck(false);
+  radio.autoAck(true);
   
  // radio.setTXaddress((void*)txaddr);  
   #if VERBOSE > 0
@@ -49,18 +52,27 @@ void setup() {
   
   //LEDS Settings 
   pinMode(RED_LED, OUTPUT);
-  pinMode(GREEN_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
   digitalWrite(RED_LED, LOW);
-  digitalWrite(GREEN_LED,LOW);
+  digitalWrite(YELLOW_LED,LOW);
   
   //Blink redled to indicate 
   blinkRed();
+  blinkYellow();
   
   //Go listen
   radio.enableRX();  // Start listening
   
 }
 
+
+void blinkYellow()
+{
+ digitalWrite(YELLOW_LED, HIGH);
+  delay(5);
+  digitalWrite(YELLOW_LED, LOW);
+  
+}
 void blinkRed()
 {
   digitalWrite(RED_LED, HIGH);
@@ -82,16 +94,22 @@ void loop() {
         #if VERBOSE > 0
         Serial.println("Received packet: ");
         Serial.print("counter: ");
-        Serial.println(inbuf[0], DEC);
+        Serial.println(inbuf[REG_PACK_COUNTER], HEX);
         Serial.println(inbuf);
         
         #endif
-      if(inbuf[0] != packetCounter){
+      if(inbuf[REG_PACK_COUNTER] != packetCounter){
         #if VERBOSE > 0
-         Serial.println("new package :)");
+         Serial.print("new package :) old counter: ");
+         Serial.print(packetCounter, HEX);
+         Serial.print(" new: ");
          #endif
-         //Handel this NEW package
+         //Handel this NEW packa
         packetCounter = inbuf[REG_PACK_COUNTER];
+        
+        #ifdef VERBOSE > 0
+        Serial.println(packetCounter, HEX);
+        #endif
         descisionMaker(inbuf);
       }
       else
@@ -104,8 +122,8 @@ void loop() {
     }
     
     if (stringComplete) {
-      blinkRed();
-      char newPayload[6];
+      blinkYellow();
+      char newPayload[10];
       newPayload[REG_PACK_COUNTER]=calcPacketIdent();
       newPayload[REG_PACK_ADDRMSB]=inputString[0];
       newPayload[REG_PACK_ADDRLSB]=inputString[1];
@@ -133,8 +151,17 @@ void loop() {
             Serial.print(newPayload[REG_PACK_TYPESET], HEX);
             break;
       }
-      Serial.println("send command onAir;");
       
+      #if VERBOSE
+      Serial.print("send command onAir: ");
+      for (int x =0;x< 10;x++){
+        Serial.println(newPayload[x], HEX);
+      }
+      Serial.println(" ");
+      Serial.print("pkg counter: ");
+      Serial.print(newPayload[REG_PACK_COUNTER], HEX);
+      
+      #endif
       
       //set package away
       radio.print(newPayload);
@@ -196,7 +223,7 @@ void descisionMaker(char *packet)
       printToPcNums(packet, PACKET_BRIGHTNESS, c, 1);
       break;
       
-      case PACKET_RGB:
+   case PACKET_RGB:
       char brightness[3];
       brightness[0] = packet[REG_PACK_VAL0];
       brightness[1] = packet[REG_PACK_VAL1];
@@ -222,13 +249,13 @@ void descisionMaker(char *packet)
 /**
   * Calcs new packetId 
   */
-char calcPacketIdent(){
-  if(packetCounter< 0xFF)
+unsigned char calcPacketIdent(){
+  if(packetCounter <= 0xFA)
   {
-    packetCounter = 1;
+    packetCounter = packetCounter + 3;
   }
   else
-    packetCounter++;
+     packetCounter = 0x03;
   return packetCounter;
 }
 
