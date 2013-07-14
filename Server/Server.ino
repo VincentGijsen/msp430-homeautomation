@@ -3,7 +3,8 @@
 #include <string.h>
 #include <SPI.h>
 
-//#define RED_LED P1_4
+//
+#define RED_LED P1_4
 #define YELLOW_LED P2_3
 
 #include "global_settings.h"
@@ -99,17 +100,16 @@ void loop() {
         
         #endif
       if(inbuf[REG_PACK_COUNTER] != packetCounter){
+        //Handle this NEW packa
+        packetCounter = inbuf[REG_PACK_COUNTER];
+        
         #if VERBOSE > 0
          Serial.print("new package :) old counter: ");
          Serial.print(packetCounter, HEX);
          Serial.print(" new: ");
-         #endif
-         //Handel this NEW packa
-        packetCounter = inbuf[REG_PACK_COUNTER];
-        
-        #ifdef VERBOSE > 0
-        Serial.println(packetCounter, HEX);
+         Serial.println(packetCounter, HEX);
         #endif
+        
         descisionMaker(inbuf);
       }
       else
@@ -275,11 +275,15 @@ void printToPcTemp(char * address, char type, uint16_t value){
     Serial.print(".");
     Serial.print(value%10, DEC);
     Serial.print(";");
+    Serial.println();
+    Serial.flush();
 }
 
 void printPing(char * address){
   _printAddress(address);
   Serial.print("p;");
+  Serial.println();
+  Serial.flush();
 }
 
 
@@ -292,6 +296,8 @@ void printToPcNums(char * address, char type, char *vals, int length){
       Serial.print(vals[x], DEC);
     }
     Serial.print(";");
+    Serial.println();
+    Serial.flush();
 }
 
 

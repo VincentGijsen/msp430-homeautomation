@@ -16,7 +16,7 @@
 Enrf24 radio(CMD, CSN, IRQ);
 const uint8_t addr[] = LISTEN_ADDRESS;
 
-const uint8_t myAddress[2] = {'L','A'};
+const uint8_t myAddress[2] = {'L','3'};
 
 int8_t i = 0;
 
@@ -83,7 +83,7 @@ void setup() {
 
 
   for (int x=0; x< 3; x++){
- current[x] = 0;
+ setPoint[x] = 0;
   }
   radio.enableRX();  // Start listening
 }
@@ -109,37 +109,42 @@ void loop() {
    *
    */
 
+  //replacement of delay, to unblock cpu
   innerCounter++;
   if(innerCounter == 0xFF){
     innerCounter = 0;
     loopCounter++;
-  }
-  
-  if(loopCounter == TOPCOUNTER){
+    
+    //The Ping Routine
+    if(loopCounter == TOPCOUNTER){
     //reset counter
     loopCounter = 0;
     blinkRed();
     pingServer();
-    blinkRed(2);
+    //blinkRed(2);
     //radio.enableRX();  // Start listening
-  }
-  /*
-  if((loopCounter % FADEUPDATE) == 0)
-  {
-    
-    for(int x=0;x<3;x++){
-      if (current[x] < setPoint[x])
-        current[x]++;
-      else if (current[x] > setPoint[x])
-        current[x]--;
     }
-   updateAnalog();
+    
+    //The fading of leds
+     // if((loopCounter % FADEUPDATE) == 0)
+     // {
+    
+      for(int x=0;x<3;x++){
+        if (current[x] < setPoint[x])
+          current[x]++;
+        else if (current[x] > setPoint[x])
+          current[x]--;
+      }
+     updateAnalog();
+    //}
   }
-  radio.isLastTXfailed();
-  */
   
-  updateAnalog();
-  delay(POWERNAP);  
+  
+  
+
+  
+//  updateAnalog();
+ // delay(POWERNAP);  
 }
 
 void updateAnalog(){
@@ -179,10 +184,10 @@ void  meshHandler(char inbuff[]){
 
      if(inbuff[REG_PACK_TYPESET] == PACKET_RGB){
       // 3 bytes, they represent R,G,B
-      current[0] = inbuff[REG_PACK_VAL0];
+      setPoint[0] = inbuff[REG_PACK_VAL0];
       #ifdef BIGCHIP
-        current[1] = inbuff[REG_PACK_VAL1];
-        current[2] = inbuff[REG_PACK_VAL2];
+        setPoint[1] = inbuff[REG_PACK_VAL1];
+        setPoint[2] = inbuff[REG_PACK_VAL2];
       #endif
       }
       else{
@@ -230,13 +235,15 @@ char calcPacketIdent(){
 }
 
 void pingServer(){
-  //send a package with Temperature
-  char d[5];
+ char d[8];
   d[0] = calcPacketIdent();
   d[1] = myAddress[0];
   d[2] = myAddress[1];
   d[3] = PACKET_PING;
-  d[4] = '\0';
+  d[4] = ';';
+  d[5] = ';';
+  d[6] = ';';
+  d[7] = '\0';
   
   radio.print(d);
   radio.flush();

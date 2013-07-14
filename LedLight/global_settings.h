@@ -56,11 +56,11 @@
 
 
 //Definitions for Sleep and fading times
-#define BLINK_DELAY 10
+#define BLINK_DELAY 20
 #define BLINK_ERROR 1000
 #define POWERNAP 2
-#define TOPCOUNTER 0x000F
-#define FADEUPDATE 10
+#define TOPCOUNTER 0x0FFF
+#define FADEUPDATE 1
 
 #ifndef BIGCHIP
   #pragma message  ("Compiling for SMALLCHIP")
