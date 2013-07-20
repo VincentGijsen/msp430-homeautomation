@@ -2,6 +2,14 @@
 
 //#define SMALLCHIP true
 
+//0x40 == @ +1 > A
+//#define PRINT_TOKEN(token) printf(#token " is %d", token)
+
+#define MINOR 0x50
+#define INDEX 1
+
+#define LSBADDRESS (MINOR + INDEX)
+#define ADRESSDELAY (LSBADDRESS - 20)
 #include "global_settings.h"
 
 #include <Enrf24.h>
@@ -16,15 +24,49 @@
 Enrf24 radio(CMD, CSN, IRQ);
 const uint8_t addr[] = LISTEN_ADDRESS;
 
-const uint8_t myAddress[2] = {'L','3'};
-
-int8_t i = 0;
-
-
+const uint8_t myAddress[2] = {'L', LSBADDRESS};
 uint16_t loopCounter=0;
 
-char setPoint[3];
-char current[3];
+uint8_t setPoint[3];
+uint8_t current[3];
+
+unsigned char linear_brightness_curve[256] = { 
+    0,   0,   0,   0,   0,   0,   0,   0, 
+    0,   0,   0,   0,   0,   0,   0,   0, 
+    0,   0,   1,   1,   1,   1,   1,   1, 
+    1,   1,   1,   1,   1,   1,   1,   1, 
+    1,   1,   1,   1,   1,   1,   1,   1, 
+    1,   1,   2,   2,   2,   2,   2,   2, 
+    2,   2,   2,   2,   2,   2,   2,   2, 
+    2,   3,   3,   3,   3,   3,   3,   3, 
+    3,   3,   3,   3,   3,   4,   4,   4, 
+    4,   4,   4,   4,   4,   4,   5,   5, 
+    5,   5,   5,   5,   5,   5,   6,   6, 
+    6,   6,   6,   6,   6,   7,   7,   7, 
+    7,   7,   8,   8,   8,   8,   8,   9, 
+    9,   9,   9,   9,  10,  10,  10,  10, 
+   11,  11,  11,  11,  12,  12,  12,  12, 
+   13,  13,  13,  14,  14,  14,  15,  15, 
+   15,  16,  16,  16,  17,  17,  18,  18, 
+   18,  19,  19,  20,  20,  21,  21,  22, 
+   22,  23,  23,  24,  24,  25,  25,  26, 
+   26,  27,  28,  28,  29,  30,  30,  31, 
+   32,  32,  33,  34,  35,  35,  36,  37, 
+   38,  39,  40,  40,  41,  42,  43,  44, 
+   45,  46,  47,  48,  49,  51,  52,  53, 
+   54,  55,  56,  58,  59,  60,  62,  63, 
+   64,  66,  67,  69,  70,  72,  73,  75, 
+   77,  78,  80,  82,  84,  86,  88,  90, 
+   91,  94,  96,  98, 100, 102, 104, 107, 
+  109, 111, 114, 116, 119, 122, 124, 127, 
+  130, 133, 136, 139, 142, 145, 148, 151, 
+  155, 158, 161, 165, 169, 172, 176, 180, 
+  184, 188, 192, 196, 201, 205, 210, 214, 
+  219, 224, 229, 234, 239, 244, 250, 255 
+};
+
+
+
 
 
 /*
@@ -50,7 +92,7 @@ void setup() {
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
   radio.setRXaddress((void*)addr);
   radio.setTXaddress((void*)addr);  
-  radio.autoAck(false);
+  radio.autoAck(true);
   
   radio.deepsleep();
 
@@ -67,23 +109,21 @@ void setup() {
  
 
   //Set current hight so we dim the light at boot
-  current[0] = 100;
-  current[1] = 100;
-  current[2] = 100;
+  current[0] = 255;
+  current[1] = 255;
+  current[2] = 255;
   updateAnalog();
  
   blinkRed(5);
-   delay(3000);
+  delay(3000);
   
  
-  //Blink redled to indicate 
-  // utils.blinkRed();
   pingServer();
   blinkRed();
 
 
   for (int x=0; x< 3; x++){
- setPoint[x] = 0;
+   setPoint[x] = 0;
   }
   radio.enableRX();  // Start listening
 }
@@ -91,6 +131,7 @@ void setup() {
 
 uint8_t packetCounter = 0x00;
 uint8_t innerCounter = 0;
+
 
 void loop() {
   char payLoad[32];
@@ -138,23 +179,18 @@ void loop() {
      updateAnalog();
     //}
   }
-  
-  
-  
-
-  
-//  updateAnalog();
- // delay(POWERNAP);  
 }
+  
 
 void updateAnalog(){
     //update the current value towards setpoint
-    analogWrite(LED_DRIVER_R, current[0]);
+    analogWrite(LED_DRIVER_R, linear_brightness_curve[current[0]]);
     #ifdef BIGCHIP
-      analogWrite(LED_DRIVER_G, current[1]);
-      analogWrite(LED_DRIVER_B, current[2]);
+      analogWrite(LED_DRIVER_G, linear_brightness_curve[current[1]]);
+      analogWrite(LED_DRIVER_B, linear_brightness_curve[current[2]]);
     #endif
 }
+
 
 void printPackage(char p[], int length){
   uint8_t it = 0;
@@ -189,6 +225,9 @@ void  meshHandler(char inbuff[]){
         setPoint[1] = inbuff[REG_PACK_VAL1];
         setPoint[2] = inbuff[REG_PACK_VAL2];
       #endif
+      
+      //send ACK to server
+      ackServer();
       }
       else{
         //invalid packet for us!
@@ -202,13 +241,20 @@ void  meshHandler(char inbuff[]){
       status = 2;
       //This packet is not for us, but new, retransmit   
       //add some 'pseudo random sleep'
-     // delay(myAddress[0] + myAddress[1]);
+      delay(ADRESSDELAY);
       //  blinkRed();
       //broadcast old package with OLD counter!
       
-      //SET THE LENGH!!! if we walk outof your the memory, we'll crash!
+      //SET THE LENGH!!! if we walk out of our the memory, we'll crash!
       radio.write(inbuff);
       radio.flush();
+      
+      //retry if last tx failed to any-node
+      if(radio.isLastTXfailed()){
+         delay(ADRESSDELAY);
+         radio.write(inbuff);
+         radio.flush();
+      }
     } 
     
 
@@ -232,6 +278,21 @@ char calcPacketIdent(){
     packetCounter = 0x01;
 
   return packetCounter;
+}
+
+void ackServer(){
+   char d[8];
+  d[0] = calcPacketIdent();
+  d[1] = myAddress[0];
+  d[2] = myAddress[1];
+  d[3] = PACKET_ACK;
+  d[4] = ';';
+  d[5] = ';';
+  d[6] = ';';
+  d[7] = '\0';
+  
+  radio.print(d);
+  radio.flush();
 }
 
 void pingServer(){

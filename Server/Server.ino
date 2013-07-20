@@ -4,25 +4,27 @@
 #include <SPI.h>
 
 //
-#define RED_LED P1_4
+//#define RED_LED P1_4
 #define YELLOW_LED P2_3
 
 #include "global_settings.h"
 
 
-#define VERBOSE 0
+#define VERBOSE 2
 
 
 Enrf24 radio(CMD, CSN, IRQ);
 const uint8_t address[] = LISTEN_ADDRESS;
 
-
-char aColour[3] = {0x00,0xFF,0xFF} ;
-
 String inputString = "";         // a string to hold incoming data
 boolean stringComplete = false;  // whether the string is complete
 
 unsigned char packetCounter = 5;
+
+//used for resend after no-ack
+boolean lastAck = false;
+char lastCmd[10];
+int timeoutCounter= 0;
 
 //Prototype
 void dump_radio_status_to_serialport(uint8_t);
@@ -42,7 +44,7 @@ void setup() {
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
   radio.setRXaddress((void*)address);
   radio.setTXaddress((void*)address);
-  radio.autoAck(false);
+  radio.autoAck(true);
   
  // radio.setTXaddress((void*)txaddr);  
   #if VERBOSE > 0
@@ -86,28 +88,31 @@ void loop() {
    ProcessSerial();
   
    char inbuf[32];
-    #if VERBOSE > 0
-    //dump_radio_status_to_serialport(radio.radioState());  // Should show Receive Mode
-    //Serial.print("Wainting for messages");
-    #endif
+   
+   //retransmit code
+   if (timeoutCounter >0){
+     timeoutCounter-- ;
+      if((!lastAck) && (timeoutCounter == 0))
+      {//presume lastAck
+        lastAck=true;
+        radio.print(lastCmd);
+        radio.flush();
+        #if VERBOSE > 0
+          Serial.println("did resend after timeout");
+        #endif
+      } 
+   }
+   
     if (radio.available(true))
      if (radio.read(inbuf)) {
-        #if VERBOSE > 0
-        Serial.println("Received packet: ");
-        Serial.print("counter: ");
-        Serial.println(inbuf[REG_PACK_COUNTER], HEX);
-        Serial.println(inbuf);
-        
-        #endif
-      if(inbuf[REG_PACK_COUNTER] != packetCounter){
+     
+       if(inbuf[REG_PACK_COUNTER] != packetCounter){
         //Handle this NEW packa
         packetCounter = inbuf[REG_PACK_COUNTER];
         
         #if VERBOSE > 0
-         Serial.print("new package :) old counter: ");
+         Serial.print("its new\n counter: ");
          Serial.print(packetCounter, HEX);
-         Serial.print(" new: ");
-         Serial.println(packetCounter, HEX);
         #endif
         
         descisionMaker(inbuf);
@@ -115,13 +120,22 @@ void loop() {
       else
       {
         #if VERBOSE > 0
-        Serial.println("Old package :(");
+        Serial.print("its old");
         //Old package
         #endif
       }
+      #if VERBOSE > 0
+      Serial.println("\n---");
+      Serial.flush();
+      //Old package
+      #endif
+    
     }
     
     if (stringComplete) {
+      timeoutCounter = RETRYCOUNTER;
+      lastAck = false;
+      stringComplete = false;
       blinkYellow();
       char newPayload[10];
       newPayload[REG_PACK_COUNTER]=calcPacketIdent();
@@ -149,26 +163,29 @@ void loop() {
           default:
             Serial.print("Unknown type of package: ");
             Serial.print(newPayload[REG_PACK_TYPESET], HEX);
+            Serial.println();
+            Serial.flush();
             break;
       }
       
       #if VERBOSE
       Serial.print("send command onAir: ");
       for (int x =0;x< 10;x++){
-        Serial.println(newPayload[x], HEX);
+        Serial.print(newPayload[x], HEX);
+        Serial.print(":");
       }
       Serial.println(" ");
       Serial.print("pkg counter: ");
       Serial.print(newPayload[REG_PACK_COUNTER], HEX);
       
       #endif
-      
-      //set package away
+    //copy array dirty way
+      for (int x=0;x < 10;x++){
+        lastCmd[x] = newPayload[x];}
+
       radio.print(newPayload);
       radio.flush();
       inputString = "";
-      stringComplete = false;
-      radio.enableRX();
     }
 }
 
@@ -181,11 +198,7 @@ void descisionMaker(char packet[])
 {
   char c[1];
   blinkRed();
-  #if VERBOSE > 0
-    Serial.print("package type: ");
-    Serial.println(packet[REG_PACK_TYPESET],HEX);
-  #endif
-
+ 
   //the REG_PACK_TYPESET byte contains type of package
   switch (packet[REG_PACK_TYPESET]) {
    case PACKET_TEMP:
@@ -236,7 +249,13 @@ void descisionMaker(char packet[])
       printToPcNums(packet, PACKET_SWITCH, c, 1);
       break;
  
-    
+   case PACKET_ACK:
+       #if VERBOSE > 0
+         Serial.println("got ack");
+       #endif
+       lastAck=true;
+       printAck(packet);
+       break;
       
   default:
     //do nothing
@@ -282,6 +301,13 @@ void printToPcTemp(char * address, char type, uint16_t value){
 void printPing(char * address){
   _printAddress(address);
   Serial.print("p;");
+  Serial.println();
+  Serial.flush();
+}
+
+void printAck(char * address){
+  _printAddress(address);
+  Serial.print("a;");
   Serial.println();
   Serial.flush();
 }
