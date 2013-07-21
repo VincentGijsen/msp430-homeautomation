@@ -26,6 +26,7 @@
 #define REG_PACK_VAL0 6
 #define REG_PACK_VAL1 7
 #define REG_PACK_VAL2 8
+#define REG_PACK_VAL3 9
 
 
 #define PC_PACKAGE_TYPE 5
@@ -69,7 +70,7 @@
 #define POWERNAP 2
 #define TOPCOUNTER 0x0FFF
 #define FADEUPDATE 1
-#define MAXBRIGHNESS 200
+#define MAXBRIGHNESS 250
 
 
 #ifndef BIGCHIP
@@ -82,8 +83,8 @@
   #define LED_DRIVER_R P2_6
 #endif
 
-#define LED_DRIVER_G P2_5
-#define LED_DRIVER_B P2_4
+#define LED_DRIVER_G P2_4
+#define LED_DRIVER_B P2_5
 
 
 #if defined(__MSP430G2452__) || defined(__MSP430G2553__) || defined(__MSP430G2231__) 

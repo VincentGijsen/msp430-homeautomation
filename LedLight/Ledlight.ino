@@ -1,13 +1,4 @@
 //Define if simple Dimmer, else RGB
-
-//#define SMALLCHIP true
-
-//0x40 == @ +1 > A
-//#define PRINT_TOKEN(token) printf(#token " is %d", token)
-
-#define MINOR 0x40
-#define INDEX 2
-
 #include "global_settings.h"
 
 #include <Enrf24.h>
@@ -22,7 +13,7 @@
 Enrf24 radio(CMD, CSN, IRQ);
 
 
-const uint8_t myAddress[5] = {'L', 'E', 'D', 'R', '1'};
+const uint8_t myAddress[5] = {'L', 'E', 'D', 'D', '1'};
 const uint8_t serverAddress[5] = SERVER_ADDRESS;
 
 uint16_t loopCounter=0;
@@ -110,13 +101,25 @@ void setup() {
  
 
   //Set current height so we dim the light at boot
-  current[0] = 200;
-  current[1] = 200;
-  current[2] = 200;
+  current[2] = 150;
+  current[1] = 0;
+  current[0] = 0;
   updateAnalog();
+  delay(1000);
  
+  #ifdef BIGCHIP
+   blinkRed();
+    current[1] = 150;
+    updateAnalog();
+    delay(1000);
+    
+    blinkRed();
+    current[0] = 150;
+    updateAnalog();
+    delay(1000);
+  #endif
   blinkRed(5);
-  delay(3000);
+  delay(5000);
   
  
   pingServer();
@@ -166,17 +169,22 @@ void loop() {
     //blinkRed(2);
     //radio.enableRX();  // Start listening
     }
-   
+    boolean updateState = false;
     for(int x=0;x<LEDLENGTH;x++)
     {
-      if (current[x] < setPoint[x])
+      if (current[x] < setPoint[x]){
+        updateState = true;
         current[x]++;
+      }
         
-      else if (current[x] > setPoint[x])
+      else if (current[x] > setPoint[x]){
         current[x]--;
+        updateState = true; 
+      }
     }
-   updateAnalog();
-  //}
+    if(updateState){
+       updateAnalog();
+    }  
   }
 }
   
@@ -191,23 +199,20 @@ void updateAnalog(){
     #endif
 }
 
-
-/**
- * Handels (re)transmision of the package to other nodes (if new)
- */
 void  networkHandler(char inbuff[]){
   int status = 0;
   //Resent packet 
   if(inbuff[REG_PACK_TYPESET] == PACKET_RGB){
       status=1;
       // 3 bytes, they represent R,G,B
+     
       setPoint[0] = inbuff[REG_PACK_VAL0] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL0] ;
-     #ifdef BIGCHIP
-     #pragma message "network bigchip code"
+      #ifdef BIGCHIP
+      #pragma message "network bigchip code"
       setPoint[1] = inbuff[REG_PACK_VAL1] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL1] ;
       setPoint[2] = inbuff[REG_PACK_VAL2] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL2] ;
-    #endif  
-    }
+      #endif 
+      }
       //NOT A RGB PACKAGE!!!!
       else{
         status =10;

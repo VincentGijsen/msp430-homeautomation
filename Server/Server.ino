@@ -10,10 +10,11 @@
 #include "global_settings.h"
 
 
-#define VERBOSE0
+#define VERBOSE 0
 
 
 Enrf24 radio(CMD, CSN, IRQ);
+//const uint8_t address[] = {'L','E','D','R','1'};
 const uint8_t address[] = SERVER_ADDRESS;
 uint8_t txaddress[] = SERVER_ADDRESS;
 
@@ -32,7 +33,7 @@ void dump_radio_status_to_serialport(uint8_t);
 void setup() {
   //SERIAL SETTINGS
   Serial.begin(9600);
-  inputString.reserve(8);
+  inputString.reserve(20);
 
   //SPI SETTINGS
   SPI.begin();
@@ -87,10 +88,10 @@ void loop() {
    ProcessSerial();
   
    char inbuf[32];
-   
+  /* 
    //retransmit code
-   if (timeoutCounter >0){
-     timeoutCounter-- ;
+  if (timeoutCounter >0){
+    timeoutCounter-- ;
       if((!lastAck) && (timeoutCounter == 0))
       {//presume lastAck
         lastAck=true;
@@ -101,10 +102,35 @@ void loop() {
         #endif
       } 
    }
-   
+   */
     if (radio.available(true))
      if (radio.read(inbuf)) {
-        
+        #if VERBOSE > 0
+        Serial.println("\nRAW PACKAGE: ");
+        Serial.flush();
+        for(int x=0;x<32;x++)
+        {
+          Serial.print(x, DEC);
+          Serial.print(';');
+          Serial.print(inbuf[x]);
+          Serial.print('\n');
+          Serial.flush();
+          
+        }
+        Serial.flush();
+        Serial.println("\n in hex:");
+         for(int x=0;x<32;x++)
+        { Serial.print(x, DEC);
+          Serial.print(';');
+          Serial.print(inbuf[x], HEX);
+          Serial.print('\n');
+          Serial.flush();
+          
+        }
+        Serial.println(inbuf);
+        Serial.flush();
+        Serial.println("");
+        #endif
         descisionMaker(inbuf);
       }
     
@@ -114,76 +140,16 @@ void loop() {
       //lastAck = false;
       stringComplete = false;
       blinkYellow();
-      char newPayload[10];
-      newPayload[REG_ADD1]=inputString[0];
-      newPayload[REG_ADD2]=inputString[1];
-      newPayload[REG_ADD3]=inputString[2];
-      newPayload[REG_ADD4]=inputString[3];
-      newPayload[REG_ADD5]=inputString[4];
+      char maxPackLeng = 32;
+      char newPayload[maxPackLeng];
    
-      //set type of package
-      newPayload[REG_PACK_TYPESET]=inputString[PC_PACKAGE_TYPE];
-     
-      switch(newPayload[REG_PACK_TYPESET])
-      {
-         case PACKET_BRIGHTNESS:
-           newPayload[REG_PACK_VAL0] = inputString[PC_VAL0];
-           break;
-         
-         case PACKET_SWITCH:
-           newPayload[REG_PACK_VAL0] = inputString[PC_VAL0];
-           break;
-           
-         case PACKET_RGB:
-           newPayload[REG_PACK_VAL0] = inputString[PC_VAL0];
-           newPayload[REG_PACK_VAL1] = inputString[PC_VAL1];
-           newPayload[REG_PACK_VAL2] = inputString[PC_VAL2];
-           break;
-         
-         //DEBUG STUFF
-         #if VERBOSE > 1
-         case 'X':
-           newPayload[REG_PACK_TYPESET] = 'r';
-           newPayload[REG_PACK_VAL0] = 0xFF;
-           newPayload[REG_PACK_VAL1] = 0x00;
-           newPayload[REG_PACK_VAL2] = 0x00;
-           break;
-           
-         case 'Y':
-           newPayload[REG_PACK_TYPESET] = 'r';
-           newPayload[REG_PACK_VAL0] = 0x00;
-           newPayload[REG_PACK_VAL1] = 0xFF;
-           newPayload[REG_PACK_VAL2] = 0x00;
-           break;
-           
-         case 'Z':
-           newPayload[REG_PACK_TYPESET] = 'r';
-           newPayload[REG_PACK_VAL0] = 0x00;
-           newPayload[REG_PACK_VAL1] = 0x00;
-           newPayload[REG_PACK_VAL2] = 0xFF;
-           break;
-           
-           
-          #endif          
-          default:
-            Serial.print("Unknown type of package: ");
-            Serial.print(newPayload[REG_PACK_TYPESET], HEX);
-            Serial.println();
-            Serial.flush();
-            break;
+      for(int x=0;x<32;x++){
+        newPayload[x] = inputString[x];
+       if (inputString[x] == '\n'){
+         break;
+       } 
       }
-      
-      #if VERBOSE
-      Serial.println("send command onAir: ");
-      for (int x =0;x< 10;x++){
-        Serial.print(newPayload[x], DEC);
-        Serial.print(":");
-      }
-      
-      #endif
-    //copy array dirty way
-      for (int x=0;x < 10;x++){
-        lastCmd[x] = newPayload[x];}
+        
         
         
       txaddress[0] = newPayload[REG_ADD1];
@@ -193,6 +159,7 @@ void loop() {
       txaddress[4] = newPayload[REG_ADD5];
       
       radio.setTXaddress(txaddress);
+      
       int retries = 10;
       while (retries != 0){
         blinkRed();
@@ -352,7 +319,7 @@ void printToPcNums(char * address, char type, char *vals, int length){
 
 
 void ProcessSerial() {
-  if (Serial.available() > 0) {
+  while (Serial.available() > 0) {
     // get the new byte:
     char inChar = (char)Serial.read(); 
     // add it to the inputString:

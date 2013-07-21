@@ -26,6 +26,7 @@
 #define REG_PACK_VAL0 6
 #define REG_PACK_VAL1 7
 #define REG_PACK_VAL2 8
+#define REG_PACK_VAL3 9
 
 
 #define PC_PACKAGE_TYPE 5
