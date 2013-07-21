@@ -57,6 +57,7 @@
 #define POWERNAP 2
 #define TOPCOUNTER 0x0FFF
 #define FADEUPDATE 1
+#define MAXBRIGHNESS 200
 
 
 #ifndef BIGCHIP

@@ -30,7 +30,7 @@ uint16_t loopCounter=0;
 uint8_t setPoint[3];
 uint8_t current[3];
 
-unsigned char linear_brightness_curve[256] = { 
+const unsigned char linear_brightness_curve[256] = { 
     0,   0,   0,   0,   0,   0,   0,   0, 
     0,   0,   0,   0,   0,   0,   0,   0, 
     0,   0,   1,   1,   1,   1,   1,   1, 
@@ -109,9 +109,9 @@ void setup() {
  
 
   //Set current hight so we dim the light at boot
-  current[0] = 255;
-  current[1] = 255;
-  current[2] = 255;
+  current[0] = 200;
+  current[1] = 200;
+  current[2] = 200;
   updateAnalog();
  
   blinkRed(5);
@@ -121,10 +121,10 @@ void setup() {
   pingServer();
   blinkRed();
 
-
-  for (int x=0; x< 3; x++){
-   setPoint[x] = 0;
-  }
+   setPoint[0] = 0;
+   setPoint[1] = 0;
+   setPoint[2] = 0;
+   
   radio.enableRX();  // Start listening
 }
 
@@ -165,11 +165,7 @@ void loop() {
     //blinkRed(2);
     //radio.enableRX();  // Start listening
     }
-    
-    //The fading of leds
-     // if((loopCounter % FADEUPDATE) == 0)
-     // {
-    
+   
       for(int x=0;x<3;x++){
         if (current[x] < setPoint[x])
           current[x]++;
@@ -192,17 +188,6 @@ void updateAnalog(){
 }
 
 
-void printPackage(char p[], int length){
-  uint8_t it = 0;
-  Serial.println("\npackage contence: ");
-
-  for (it=0; it< length; it++){
-    Serial.print(p[it], HEX);
-    Serial.print("-");
-  }
-
-}
-
 /**
  * Handels (re)transmision of the package to other nodes (if new)
  */
@@ -220,10 +205,10 @@ void  meshHandler(char inbuff[]){
 
      if(inbuff[REG_PACK_TYPESET] == PACKET_RGB){
       // 3 bytes, they represent R,G,B
-      setPoint[0] = inbuff[REG_PACK_VAL0];
+      setPoint[0] = inbuff[REG_PACK_VAL0] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL0] ;
       #ifdef BIGCHIP
-        setPoint[1] = inbuff[REG_PACK_VAL1];
-        setPoint[2] = inbuff[REG_PACK_VAL2];
+        setPoint[1] = inbuff[REG_PACK_VAL1] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL1] ;
+        setPoint[2] = inbuff[REG_PACK_VAL2] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL2] ;
       #endif
       
       //send ACK to server
@@ -286,9 +271,9 @@ void ackServer(){
   d[1] = myAddress[0];
   d[2] = myAddress[1];
   d[3] = PACKET_ACK;
-  d[4] = ';';
-  d[5] = ';';
-  d[6] = ';';
+  for(int x=0;x<3;x++){
+  d[x+4] = ';';
+  }
   d[7] = '\0';
   
   radio.print(d);
