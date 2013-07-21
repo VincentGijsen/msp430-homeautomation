@@ -10,19 +10,31 @@
 #define GLOBAL_SETTINGS_H_
 
 #if defined(__MSP430G2553__)
-#define BIGCHIP
+  #define BIGCHIP
 #endif
 
-#define REG_PACK_COUNTER 0
-#define REG_PACK_ADDRMSB 1
-#define REG_PACK_ADDRLSB 2
-#define REG_PACK_TYPESET 3
-#define REG_PACK_VAL0 4
-#define REG_PACK_VAL1 5
-#define REG_PACK_VAL2 6
+//#define REG_PACK_COUNTER 0
+//#define REG_PACK_ADDRMSB 1
+//#define REG_PACK_ADDRLSB 2
+
+#define REG_ADD1 0
+#define REG_ADD2 1
+#define REG_ADD3 2
+#define REG_ADD4 3
+#define REG_ADD5 4
+#define REG_PACK_TYPESET 5
+#define REG_PACK_VAL0 6
+#define REG_PACK_VAL1 7
+#define REG_PACK_VAL2 8
 
 
-#define LISTEN_ADDRESS   {'M','U','L','T','I'}
+#define PC_PACKAGE_TYPE 5
+#define PC_VAL0 6
+#define PC_VAL1 7
+#define PC_VAL2 8
+
+
+#define SERVER_ADDRESS {'M','U','L','T','I'}
 
 
 //Radio Settings

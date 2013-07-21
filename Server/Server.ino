@@ -10,16 +10,15 @@
 #include "global_settings.h"
 
 
-#define VERBOSE 2
+#define VERBOSE0
 
 
 Enrf24 radio(CMD, CSN, IRQ);
-const uint8_t address[] = LISTEN_ADDRESS;
+const uint8_t address[] = SERVER_ADDRESS;
+uint8_t txaddress[] = SERVER_ADDRESS;
 
 String inputString = "";         // a string to hold incoming data
 boolean stringComplete = false;  // whether the string is complete
-
-unsigned char packetCounter = 5;
 
 //used for resend after no-ack
 boolean lastAck = false;
@@ -43,7 +42,7 @@ void setup() {
   //RADIO SETTINGS
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
   radio.setRXaddress((void*)address);
-  radio.setTXaddress((void*)address);
+  radio.setTXaddress((void*)txaddress);
   radio.autoAck(true);
   
  // radio.setTXaddress((void*)txaddr);  
@@ -105,59 +104,40 @@ void loop() {
    
     if (radio.available(true))
      if (radio.read(inbuf)) {
-     
-       if(inbuf[REG_PACK_COUNTER] != packetCounter){
-        //Handle this NEW packa
-        packetCounter = inbuf[REG_PACK_COUNTER];
-        
-        #if VERBOSE > 0
-         Serial.print("its new\n counter: ");
-         Serial.print(packetCounter, HEX);
-        #endif
         
         descisionMaker(inbuf);
       }
-      else
-      {
-        #if VERBOSE > 0
-        Serial.print("its old");
-        //Old package
-        #endif
-      }
-      #if VERBOSE > 0
-      Serial.println("\n---");
-      Serial.flush();
-      //Old package
-      #endif
     
-    }
     
     if (stringComplete) {
-      timeoutCounter = RETRYCOUNTER;
-      lastAck = false;
+      //timeoutCounter = RETRYCOUNTER;
+      //lastAck = false;
       stringComplete = false;
       blinkYellow();
       char newPayload[10];
-      newPayload[REG_PACK_COUNTER]=calcPacketIdent();
-      newPayload[REG_PACK_ADDRMSB]=inputString[0];
-      newPayload[REG_PACK_ADDRLSB]=inputString[1];
+      newPayload[REG_ADD1]=inputString[0];
+      newPayload[REG_ADD2]=inputString[1];
+      newPayload[REG_ADD3]=inputString[2];
+      newPayload[REG_ADD4]=inputString[3];
+      newPayload[REG_ADD5]=inputString[4];
+   
       //set type of package
-      newPayload[REG_PACK_TYPESET]=inputString[2];
+      newPayload[REG_PACK_TYPESET]=inputString[PC_PACKAGE_TYPE];
      
       switch(newPayload[REG_PACK_TYPESET])
       {
          case PACKET_BRIGHTNESS:
-           newPayload[REG_PACK_VAL0] = inputString[3];
+           newPayload[REG_PACK_VAL0] = inputString[PC_VAL0];
            break;
          
          case PACKET_SWITCH:
-           newPayload[REG_PACK_VAL0] = inputString[3];
+           newPayload[REG_PACK_VAL0] = inputString[PC_VAL0];
            break;
            
          case PACKET_RGB:
-           newPayload[REG_PACK_VAL0] = inputString[3];
-           newPayload[REG_PACK_VAL1] = inputString[4];
-           newPayload[REG_PACK_VAL2] = inputString[5];
+           newPayload[REG_PACK_VAL0] = inputString[PC_VAL0];
+           newPayload[REG_PACK_VAL1] = inputString[PC_VAL1];
+           newPayload[REG_PACK_VAL2] = inputString[PC_VAL2];
            break;
          
          //DEBUG STUFF
@@ -194,23 +174,44 @@ void loop() {
       }
       
       #if VERBOSE
-      Serial.print("send command onAir: ");
+      Serial.println("send command onAir: ");
       for (int x =0;x< 10;x++){
-        Serial.print(newPayload[x], HEX);
+        Serial.print(newPayload[x], DEC);
         Serial.print(":");
       }
-      Serial.println(" ");
-      Serial.print("pkg counter: ");
-      Serial.print(newPayload[REG_PACK_COUNTER], HEX);
       
       #endif
     //copy array dirty way
       for (int x=0;x < 10;x++){
         lastCmd[x] = newPayload[x];}
-
-      radio.print(newPayload);
-      radio.flush();
-      inputString = "";
+        
+        
+      txaddress[0] = newPayload[REG_ADD1];
+      txaddress[1] = newPayload[REG_ADD2];
+      txaddress[2] = newPayload[REG_ADD3];
+      txaddress[3] = newPayload[REG_ADD4];
+      txaddress[4] = newPayload[REG_ADD5];
+      
+      radio.setTXaddress(txaddress);
+      int retries = 10;
+      while (retries != 0){
+        blinkRed();
+        radio.print(newPayload);
+        radio.flush();
+        boolean lastFailed = radio.isLastTXfailed();
+    
+        if (lastFailed){
+         // Serial.println("Failed, retry send " + retries);
+          retries --;  
+          delay(20);
+        }
+        else{
+             // Serial.println("success " + retries);
+              break;
+        }
+      }
+      
+        inputString = "";
     }
 }
 
@@ -299,24 +300,13 @@ void descisionMaker(char packet[])
 }
 
 
-/**
-  * Calcs new packetId 
-  */
-unsigned char calcPacketIdent(){
-  if(packetCounter <= 0xFA)
-  {
-    packetCounter = packetCounter + 3;
-  }
-  else
-     packetCounter = 0x03;
-  return packetCounter;
-}
-
-
 void _printAddress(char *address){
     Serial.print("[");
-    Serial.print(address[REG_PACK_ADDRMSB]);
-    Serial.print(address[REG_PACK_ADDRLSB]);
+    Serial.print(address[REG_ADD1]);
+    Serial.print(address[REG_ADD2]);
+    Serial.print(address[REG_ADD3]);
+    Serial.print(address[REG_ADD4]);
+    Serial.print(address[REG_ADD5]);
     Serial.print( "]");
 }
 

@@ -6,10 +6,8 @@
 //#define PRINT_TOKEN(token) printf(#token " is %d", token)
 
 #define MINOR 0x40
-#define INDEX 1
+#define INDEX 2
 
-#define LSBADDRESS (MINOR + INDEX)
-#define ADRESSDELAY (LSBADDRESS - 20)
 #include "global_settings.h"
 
 #include <Enrf24.h>
@@ -22,9 +20,11 @@
 #define VERBOSE 0
 
 Enrf24 radio(CMD, CSN, IRQ);
-const uint8_t addr[] = LISTEN_ADDRESS;
 
-const uint8_t myAddress[2] = {'L', LSBADDRESS};
+
+const uint8_t myAddress[5] = {'L', 'E', 'D', 'R', '1'};
+const uint8_t serverAddress[5] = SERVER_ADDRESS;
+
 uint16_t loopCounter=0;
 
 uint8_t setPoint[3];
@@ -90,8 +90,8 @@ void setup() {
 
   //RADIO SETTINGS
   radio.begin(RADIO_SPEED, RADIO_CHANNEL);  // Defaults 1Mbps, channel 0, max TX power
-  radio.setRXaddress((void*)addr);
-  radio.setTXaddress((void*)addr);  
+  radio.setRXaddress((void*)myAddress);
+  radio.setTXaddress((void*)serverAddress);  
   radio.autoAck(true);
   
   radio.deepsleep();
@@ -101,6 +101,7 @@ void setup() {
   analogWrite(LED_DRIVER_R, 0);
 
 #ifdef BIGCHIP
+  #pragma message  ("Enabeling r and g")
   pinMode(LED_DRIVER_G, OUTPUT);
   analogWrite(LED_DRIVER_G, 0);
   pinMode(LED_DRIVER_B, OUTPUT);
@@ -108,7 +109,7 @@ void setup() {
 #endif
  
 
-  //Set current hight so we dim the light at boot
+  //Set current height so we dim the light at boot
   current[0] = 200;
   current[1] = 200;
   current[2] = 200;
@@ -121,9 +122,9 @@ void setup() {
   pingServer();
   blinkRed();
 
-   setPoint[0] = 0;
-   setPoint[1] = 0;
-   setPoint[2] = 0;
+  setPoint[0] = 0;
+  setPoint[1] = 0;
+  setPoint[2] = 0;
    
   radio.enableRX();  // Start listening
 }
@@ -140,7 +141,7 @@ void loop() {
   if(radio.available(true))
   {     
     radio.read(payLoad); 
-    meshHandler(payLoad);
+    networkHandler(payLoad);
   }
 
 
@@ -166,14 +167,16 @@ void loop() {
     //radio.enableRX();  // Start listening
     }
    
-      for(int x=0;x<3;x++){
-        if (current[x] < setPoint[x])
-          current[x]++;
-        else if (current[x] > setPoint[x])
-          current[x]--;
-      }
-     updateAnalog();
-    //}
+    for(int x=0;x<LEDLENGTH;x++)
+    {
+      if (current[x] < setPoint[x])
+        current[x]++;
+        
+      else if (current[x] > setPoint[x])
+        current[x]--;
+    }
+   updateAnalog();
+  //}
   }
 }
   
@@ -182,6 +185,7 @@ void updateAnalog(){
     //update the current value towards setpoint
     analogWrite(LED_DRIVER_R, linear_brightness_curve[current[0]]);
     #ifdef BIGCHIP
+      #pragma message  ("Colors for bigchip updateAnalog")
       analogWrite(LED_DRIVER_G, linear_brightness_curve[current[1]]);
       analogWrite(LED_DRIVER_B, linear_brightness_curve[current[2]]);
     #endif
@@ -191,102 +195,36 @@ void updateAnalog(){
 /**
  * Handels (re)transmision of the package to other nodes (if new)
  */
-void  meshHandler(char inbuff[]){
+void  networkHandler(char inbuff[]){
   int status = 0;
   //Resent packet 
-  if(inbuff[REG_PACK_COUNTER] != packetCounter){
-    //set packageCounter to new counter
-    packetCounter = inbuff[REG_PACK_COUNTER];
-    status = 1;
-    
-    //Is it a package for this node?
-    if((inbuff[REG_PACK_ADDRMSB] == myAddress[0]) && (inbuff[REG_PACK_ADDRLSB] == myAddress[1]))
-    {
-      //We received a package for ourselves :)
-      status=4;
-
-     if(inbuff[REG_PACK_TYPESET] == PACKET_RGB){
+  if(inbuff[REG_PACK_TYPESET] == PACKET_RGB){
+      status=1;
       // 3 bytes, they represent R,G,B
       setPoint[0] = inbuff[REG_PACK_VAL0] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL0] ;
-      #ifdef BIGCHIP
-        setPoint[1] = inbuff[REG_PACK_VAL1] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL1] ;
-        setPoint[2] = inbuff[REG_PACK_VAL2] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL2] ;
-      #endif
-      
-      //send ACK to server
-      ackServer();
-      }
+     #ifdef BIGCHIP
+     #pragma message "network bigchip code"
+      setPoint[1] = inbuff[REG_PACK_VAL1] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL1] ;
+      setPoint[2] = inbuff[REG_PACK_VAL2] > MAXBRIGHNESS ? MAXBRIGHNESS : inbuff[REG_PACK_VAL2] ;
+    #endif  
+    }
       //NOT A RGB PACKAGE!!!!
       else{
         status =10;
       }
-      
-    }
-    //The package is not ours
-    else
-    { //The package is not for us, but we retransmit 1-time
-      status = 2;
-      delay(ADRESSDELAY);
-      radio.write(inbuff);
-      radio.flush();
-      delay(ADRESSDELAY);
-    
-      //retry if last tx failed to any-node
-      if(radio.isLastTXfailed()){
-         radio.write(inbuff);
-         radio.flush();
-         status= 4;
-      }
-    } 
-    
-
-  } 
-  else{
-    //We've seen this pakge already! 
-    status = 1;
-  }
-  blinkRed(status);
-
+   blinkRed(status);
 }
 
- /* Calcs new packetId 
- */
-char calcPacketIdent(){
-  if(packetCounter < 0xF0)
-  {
-    packetCounter++;
-  }
-  else
-    packetCounter = 0x01;
-
-  return packetCounter;
-}
-
-void ackServer(){
-   char d[8];
-  d[0] = calcPacketIdent();
-  d[1] = myAddress[0];
-  d[2] = myAddress[1];
-  d[3] = PACKET_ACK;
-  for(int x=0;x<3;x++){
-  d[x+4] = ';';
-  }
-  d[7] = '\0';
-  
-  radio.print(d);
-  radio.flush();
-}
 
 void pingServer(){
- char d[8];
-  d[0] = calcPacketIdent();
-  d[1] = myAddress[0];
-  d[2] = myAddress[1];
-  d[3] = PACKET_PING;
-  d[4] = ';';
-  d[5] = ';';
-  d[6] = ';';
-  d[7] = '\0';
+ char d[7];
+  d[REG_ADD1] = myAddress[REG_ADD1];
+  d[REG_ADD2] = myAddress[REG_ADD2];
+  d[REG_ADD3] = myAddress[REG_ADD3];
+  d[REG_ADD4] = myAddress[REG_ADD4];
+  d[REG_ADD5] = myAddress[REG_ADD5];
+  d[REG_PACK_TYPESET] = PACKET_PING;        
+  d[6] = '\0';
   
   radio.print(d);
   radio.flush();
