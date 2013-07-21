@@ -4,7 +4,7 @@
 #include <SPI.h>
 
 //
-//#define RED_LED P1_4
+#define RED_LED P1_4
 #define YELLOW_LED P2_3
 
 #include "global_settings.h"
@@ -160,6 +160,31 @@ void loop() {
            newPayload[REG_PACK_VAL2] = inputString[5];
            break;
          
+         //DEBUG STUFF
+         #if VERBOSE > 1
+         case 'X':
+           newPayload[REG_PACK_TYPESET] = 'r';
+           newPayload[REG_PACK_VAL0] = 0xFF;
+           newPayload[REG_PACK_VAL1] = 0x00;
+           newPayload[REG_PACK_VAL2] = 0x00;
+           break;
+           
+         case 'Y':
+           newPayload[REG_PACK_TYPESET] = 'r';
+           newPayload[REG_PACK_VAL0] = 0x00;
+           newPayload[REG_PACK_VAL1] = 0xFF;
+           newPayload[REG_PACK_VAL2] = 0x00;
+           break;
+           
+         case 'Z':
+           newPayload[REG_PACK_TYPESET] = 'r';
+           newPayload[REG_PACK_VAL0] = 0x00;
+           newPayload[REG_PACK_VAL1] = 0x00;
+           newPayload[REG_PACK_VAL2] = 0xFF;
+           break;
+           
+           
+          #endif          
           default:
             Serial.print("Unknown type of package: ");
             Serial.print(newPayload[REG_PACK_TYPESET], HEX);
@@ -234,6 +259,7 @@ void descisionMaker(char packet[])
      
       c[0] = packet[REG_PACK_VAL0];
       printToPcNums(packet, PACKET_BRIGHTNESS, c, 1);
+     
       break;
       
    case PACKET_RGB:
@@ -242,6 +268,14 @@ void descisionMaker(char packet[])
       brightness[1] = packet[REG_PACK_VAL1];
       brightness[2] = packet[REG_PACK_VAL2];
       printToPcNums(packet, PACKET_RGB, brightness, 3);
+      
+       #if VERBOSE > 1
+      Serial.print("\nRGB: ");
+      for (int x =0;x< 10;x++){
+        Serial.print(packet[x], HEX);
+        Serial.print(":");
+      }
+      #endif
       break;
  
   case PACKET_SWITCH:

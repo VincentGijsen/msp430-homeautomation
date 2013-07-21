@@ -52,7 +52,7 @@
 
 
 //Definitions for Sleep and fading times
-#define BLINK_DELAY 20
+#define BLINK_DELAY 5
 #define BLINK_ERROR 1000
 #define POWERNAP 2
 #define TOPCOUNTER 0x0FFF

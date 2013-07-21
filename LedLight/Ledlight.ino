@@ -5,7 +5,7 @@
 //0x40 == @ +1 > A
 //#define PRINT_TOKEN(token) printf(#token " is %d", token)
 
-#define MINOR 0x50
+#define MINOR 0x40
 #define INDEX 1
 
 #define LSBADDRESS (MINOR + INDEX)
@@ -198,6 +198,8 @@ void  meshHandler(char inbuff[]){
     //set packageCounter to new counter
     packetCounter = inbuff[REG_PACK_COUNTER];
     status = 1;
+    
+    //Is it a package for this node?
     if((inbuff[REG_PACK_ADDRMSB] == myAddress[0]) && (inbuff[REG_PACK_ADDRLSB] == myAddress[1]))
     {
       //We received a package for ourselves :)
@@ -214,31 +216,26 @@ void  meshHandler(char inbuff[]){
       //send ACK to server
       ackServer();
       }
+      //NOT A RGB PACKAGE!!!!
       else{
-        //invalid packet for us!
-        //BLINK LoNG!!!
         status =10;
       }
       
     }
+    //The package is not ours
     else
     { //The package is not for us, but we retransmit 1-time
       status = 2;
-      //This packet is not for us, but new, retransmit   
-      //add some 'pseudo random sleep'
       delay(ADRESSDELAY);
-      //  blinkRed();
-      //broadcast old package with OLD counter!
-      
-      //SET THE LENGH!!! if we walk out of our the memory, we'll crash!
       radio.write(inbuff);
       radio.flush();
-      
+      delay(ADRESSDELAY);
+    
       //retry if last tx failed to any-node
       if(radio.isLastTXfailed()){
-         delay(ADRESSDELAY);
          radio.write(inbuff);
          radio.flush();
+         status= 4;
       }
     } 
     
